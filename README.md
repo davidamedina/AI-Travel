@@ -110,8 +110,7 @@ The AI algorithms analyze user preferences and travel history to suggest destina
 <div>
   ## 📧 Contact<br/>
 
-For any inquiries, please reach out to [eng.alzahraa.meky@gmail.com](eng.alzahraa.meky@gmail.com).<br/>
-or contact via WhatsApp at +96899495057.
+For any inquiries, please reach out to [davidmedina0619@gmail.com](davidmedina0619@gmail.com).<br/>
 
 ---
 
