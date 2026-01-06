@@ -11,14 +11,23 @@ const HotelList = ({ hotelList }) => {
         showsHorizontalScrollIndicator={false}
         renderItem={({ item }) => (
           <View style={{marginRight:20,width:180}}>
-            <Image 
-            source={require('./../../assets/images/travel.jpg')} 
-            style={styles.image} 
-            />
+            {item.image_url ? (
+              <Image 
+                source={{ uri: item.image_url }} 
+                style={styles.image}
+                defaultSource={require('./../../assets/images/travel.jpg')}
+              />
+            ) : (
+              <Image 
+                source={require('./../../assets/images/travel.jpg')} 
+                style={styles.image} 
+              />
+            )}
             <View>
                 <Text style={styles.hotelName}>{item.name}</Text>
+                <Text style={styles.hotelAddress}>{item.address}</Text>
                 <View style={styles.flexContainer}>
-                    <Text style={{fontFamily:'Outfit'}}>🌟 {item.rating}</Text>
+                    <Text style={{fontFamily:'Outfit'}}>🌟 {item.rating || 'N/A'}</Text>
                     <Text style={{fontFamily:'Outfit'}}>💰 {item.price}</Text>
                 </View> 
             </View>

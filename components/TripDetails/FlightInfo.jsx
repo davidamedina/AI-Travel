@@ -13,20 +13,24 @@ const FlightInfo = ({ flightData }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.flexContainer}>
-        <Text style={styles.title}>✈️ Flights</Text>
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={() => Linking.openURL(flight.booking_url)}
-          >
-            <Text style={styles.buttonTxT}>Book Here</Text>
-          </TouchableOpacity>
-      </View>
+      <Text style={styles.title}>✈️ Flights</Text>
       {flightData.map((flight, index) => (
         <View key={index} style={styles.flightContainer}>
           <Text style={styles.para}>Airline: {flight.airline}</Text>
+          <Text style={styles.para}>Flight Number: {flight.flight_number || 'N/A'}</Text>
+          <Text style={styles.para}>Departure: {flight.departure_city} ({flight.departure_airport})</Text>
+          <Text style={styles.para}>Arrival: {flight.arrival_city} ({flight.arrival_airport})</Text>
+          <Text style={styles.para}>Departure Time: {flight.departure_time}</Text>
+          <Text style={styles.para}>Arrival Time: {flight.arrival_time}</Text>
           <Text style={styles.para}>Price: {flight.price}</Text>
-          
+          {flight.booking_url && (
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={() => Linking.openURL(flight.booking_url)}
+            >
+              <Text style={styles.buttonTxT}>Book Here</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ))}
     </View>
@@ -67,9 +71,4 @@ const styles = StyleSheet.create({
     marginTop: 15,
   
   },
-  flexContainer:{
-    display:'flex',
-    flexDirection:'row',
-    justifyContent:'space-between'
-  }
 });
