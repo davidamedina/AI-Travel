@@ -1,55 +1,153 @@
-import { StyleSheet, Text, View, Image } from 'react-native';
+import { StyleSheet, Text, View, Image, Alert, ActivityIndicator } from 'react-native';
 import { useEffect, useContext, useState } from 'react';
 import { useNavigation, useRouter } from 'expo-router';
 import { CreateTripContext } from '../../context/CreateTripContext';
 import { Colors } from './../../constants/Colors';
 import { AI_PROMPT } from './../../constants/data';
-import { chatSession } from './../../config/AiModel';
+import { generateTravelPlan } from './../../config/AiModel';
 import { auth, db } from './../../config/FirebaseConfig';
-import { setDoc, doc } from 'firebase/firestore'; // Correct Firebase import
+import { setDoc, doc } from 'firebase/firestore';
 
 const GenerateTrip = () => {
   const user = auth.currentUser;
   const { tripData } = useContext(CreateTripContext);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const router = useRouter();
+  const navigation = useNavigation();
 
   useEffect(() => {
-    generateAiTrip();
+    // Prevent going back during generation
+    navigation.addListener('beforeRemove', (e) => {
+      if (loading) {
+        e.preventDefault();
+        Alert.alert(
+          'Generation in Progress',
+          'Please wait while we generate your trip plan.',
+          [{ text: 'OK' }]
+        );
+      }
+    });
+
+    // Start generation when component mounts
+    if (tripData?.locationInfo?.name && tripData?.totalNumOfDays && tripData?.traveler?.title && tripData?.budget) {
+      generateAiTrip();
+    } else {
+      setError('Missing trip information. Please go back and complete all steps.');
+      setLoading(false);
+    }
+
+    return () => {
+      navigation.removeListener('beforeRemove');
+    };
   }, []);
 
   const generateAiTrip = async () => {
     try {
       setLoading(true);
-      const FINAL_PROMPT = AI_PROMPT.replace('{location}', tripData?.locationInfo?.name)
-        .replace('{totalDay}', tripData?.totalNumOfDays)
-        .replace('{totalNight}', tripData?.totalNumOfDays - 1)
-        .replace('{traveler}', tripData?.traveler?.title)
-        .replace('{budget}', tripData?.budget)
-        .replace('{totalDay}', tripData?.totalNumOfDays)
-        .replace('{totalNight}', tripData?.totalNumOfDays - 1)
+      setError(null);
 
-      console.log('FINAL_PROMPT', FINAL_PROMPT);
-      const result = await chatSession.sendMessage(FINAL_PROMPT);
+      // Validate required data
+      if (!tripData?.locationInfo?.name) {
+        throw new Error('Destination is required');
+      }
+      if (!tripData?.totalNumOfDays) {
+        throw new Error('Travel duration is required');
+      }
+      if (!tripData?.traveler?.title) {
+        throw new Error('Traveler type is required');
+      }
+      if (!tripData?.budget) {
+        throw new Error('Budget is required');
+      }
 
-      // Assuming the response text is a JSON string
-      const tripResponse = JSON.parse(result.response.text());
-      console.log(tripResponse);
-      setLoading(false);
+      // Build the prompt with all replacements
+      let FINAL_PROMPT = AI_PROMPT
+        .replace(/{location}/g, tripData.locationInfo.name || 'Unknown')
+        .replace(/{totalDay}/g, tripData.totalNumOfDays?.toString() || '3')
+        .replace(/{totalNight}/g, (tripData.totalNumOfDays - 1)?.toString() || '2')
+        .replace(/{traveler}/g, tripData.traveler?.title || 'Traveler')
+        .replace(/{budget}/g, tripData.budget || 'Moderate');
 
-      // Save generating trip data to Firebase
+      console.log('Generating trip with prompt:', FINAL_PROMPT.substring(0, 100) + '...');
+
+      // Generate the travel plan using the AI model
+      let tripResponse = await generateTravelPlan(FINAL_PROMPT);
+      
+      console.log('Trip generated successfully:', tripResponse);
+
+      // Validate the response structure
+      if (!tripResponse || typeof tripResponse !== 'object') {
+        throw new Error('Invalid response format from AI');
+      }
+
+      // Ensure the response has the correct structure
+      // If the AI returns just the trip object, wrap it properly
+      if (tripResponse.trip && !tripResponse.travel_plan) {
+        tripResponse = {
+          travel_plan: {
+            destination: tripData.locationInfo.name
+          },
+          trip: tripResponse.trip
+        };
+      } else if (!tripResponse.trip && !tripResponse.travel_plan) {
+        // If AI returns a different structure, try to adapt it
+        tripResponse = {
+          travel_plan: {
+            destination: tripData.locationInfo.name
+          },
+          trip: {
+            flights: tripResponse.flights || [],
+            hotels: tripResponse.hotels || [],
+            itinerary: tripResponse.itinerary || []
+          }
+        };
+      }
+
+      // Validate required fields exist
+      if (!tripResponse.travel_plan || !tripResponse.trip) {
+        throw new Error('AI response missing required structure');
+      }
+
+      // Ensure user is authenticated
+      if (!user || !user.email) {
+        throw new Error('User not authenticated');
+      }
+
+      // Save trip data to Firebase
       const docId = Date.now().toString();
       await setDoc(doc(db, 'UserTrip', docId), {
         userEmail: user.email,
-        tripPlan: tripResponse, // AI Generate Result
-        tripData: JSON.stringify(tripData), // User Selection data
+        tripPlan: tripResponse,
+        tripData: JSON.stringify(tripData),
         docId: docId,
+        createdAt: new Date().toISOString(),
       });
 
-      router.push('/MyTrip');
+      setLoading(false);
+      
+      // Navigate to MyTrip page
+      router.replace('/MyTrip');
     } catch (error) {
       console.error('Error generating trip:', error);
+      setError(error.message || 'Failed to generate trip. Please try again.');
       setLoading(false);
+      
+      // Show error alert
+      Alert.alert(
+        'Generation Failed',
+        error.message || 'Failed to generate your trip plan. Please check your internet connection and try again.',
+        [
+          {
+            text: 'Go Back',
+            onPress: () => router.back(),
+          },
+          {
+            text: 'Retry',
+            onPress: () => generateAiTrip(),
+          },
+        ]
+      );
     }
   };
 
@@ -57,14 +155,31 @@ const GenerateTrip = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Please Wait .........</Text>
       <Text style={styles.paragraph}>We are working on generating your dream Trip</Text>
-      <View style={styles.imageContainer}>
-        <Image 
-          source={require('./../../assets/images/plane.gif')} 
-          style={styles.image} 
-          resizeMode="contain"
-        />
-      </View>
-      <Text style={styles.paragraph}>Don't go back.</Text>
+      
+      {loading && (
+        <View style={styles.imageContainer}>
+          <Image 
+            source={require('./../../assets/images/plane.gif')} 
+            style={styles.image} 
+            resizeMode="contain"
+          />
+          <ActivityIndicator 
+            size="large" 
+            color={Colors.primary} 
+            style={{ marginTop: 20 }}
+          />
+        </View>
+      )}
+
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>⚠️ {error}</Text>
+        </View>
+      )}
+
+      {loading && (
+        <Text style={styles.paragraph}>Don't go back.</Text>
+      )}
     </View>
   );
 };
@@ -103,6 +218,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit',
     fontSize: 20,
     color: Colors.gray,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    marginTop: 30,
+    padding: 20,
+    backgroundColor: '#ffebee',
+    borderRadius: 10,
+  },
+  errorText: {
+    fontFamily: 'Outfit-Medium',
+    fontSize: 16,
+    color: '#c62828',
     textAlign: 'center',
   },
 });

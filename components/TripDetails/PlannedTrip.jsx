@@ -14,6 +14,45 @@ const renderActivity = ({ item }) => (
 const PlannedTrip = ({ details }) => {
   console.log("details from plan trip", details);
 
+  if (!details || (Array.isArray(details) && details.length === 0)) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>🏕️ Plan Details</Text>
+        <Text style={styles.para}>No itinerary available.</Text>
+      </View>
+    );
+  }
+
+  // Handle array format (itinerary array)
+  if (Array.isArray(details)) {
+    // Group by day
+    const groupedByDay = details.reduce((acc, item) => {
+      const day = item.day || 'Day 1';
+      if (!acc[day]) {
+        acc[day] = [];
+      }
+      acc[day].push(item);
+      return acc;
+    }, {});
+
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>🏕️ Plan Details</Text>
+        {Object.entries(groupedByDay).map(([day, activities], index) => (
+          <View key={index} style={styles.dayContainer}>
+            <Text style={styles.dayTitle}>{day}</Text>
+            <FlatList
+              data={activities}
+              renderItem={renderActivity}
+              keyExtractor={(item, idx) => `${day}-${idx}`}
+            />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  // Handle object format (if it's already grouped by day)
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🏕️ Plan Details</Text>
@@ -21,9 +60,9 @@ const PlannedTrip = ({ details }) => {
         <View key={index} style={styles.dayContainer}>
           <Text style={styles.dayTitle}>{day.charAt(0).toUpperCase() + day.slice(1)}</Text>
           <FlatList
-            data={activities}
+            data={Array.isArray(activities) ? activities : [activities]}
             renderItem={renderActivity}
-            keyExtractor={(item, index) => `${day}-${index}`}
+            keyExtractor={(item, idx) => `${day}-${idx}`}
           />
         </View>
       ))}
@@ -57,5 +96,10 @@ const styles = StyleSheet.create({
   activityTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  para: {
+    fontFamily: 'Outfit',
+    fontSize: 17,
+    color: '#777',
   },
 });

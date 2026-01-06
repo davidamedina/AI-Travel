@@ -65,7 +65,7 @@ const ReviewTrip = () => {
           <View style={styles.flex}>
             <Text>💰</Text>
             <View>
-                <Text style={{fontFamily:'Outfit',fontSize:20,color:Colors.gray}}>Who is traveling </Text>
+                <Text style={{fontFamily:'Outfit',fontSize:20,color:Colors.gray}}>Budget</Text>
                 <Text style={{fontFamily: 'Outfit-Medium', fontSize: 20}}>{tripData?.budget}</Text>
 
             </View>
