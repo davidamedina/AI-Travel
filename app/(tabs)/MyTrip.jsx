@@ -3,9 +3,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useEffect, useState } from 'react';
 import StartNewTripCard from '../../components/MyTrips/StartNewTripCard';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { auth, db } from './../../config/FirebaseConfig';
+import { auth } from './../../config/FirebaseConfig';
 import UserTripList from './../../components/MyTrips/UserTripList';
+import { getOptimizedUserTrips } from './../../utils/firebaseOptimizer';
 
 const MyTrip = () => {
   const [userTrips, setUserTrips] = useState([]);
@@ -22,14 +22,16 @@ const MyTrip = () => {
   const getMyTrip = async () => {
     setLoading(true);
     setUserTrips([]);
-    const q = query(collection(db,'UserTrip'), where('userEmail', '==', userEmail));
-    const querySnapshot = await getDocs(q);
-    querySnapshot.forEach((doc) => {
-      console.log(doc.id, ' => ', doc.data());
-      setUserTrips((prev) => [...prev, doc.data()]);
-      console.log('setUserTrips',userTrips)
-    });
-    setLoading(false);
+    try {
+      // Use optimized query with caching
+      const trips = await getOptimizedUserTrips(userEmail, true);
+      setUserTrips(trips);
+    } catch (error) {
+      console.error('Error fetching trips:', error);
+      setUserTrips([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

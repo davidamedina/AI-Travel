@@ -7,6 +7,8 @@ import { AI_PROMPT } from './../../constants/data';
 import { generateTravelPlan } from './../../config/AiModel';
 import { auth, db } from './../../config/FirebaseConfig';
 import { setDoc, doc } from 'firebase/firestore';
+import { getCachedTripPlan, cacheTripPlan } from './../../utils/cache';
+import { getOptimizedUserTrips, invalidateUserTripsCache } from './../../utils/firebaseOptimizer';
 
 const GenerateTrip = () => {
   const user = auth.currentUser;
@@ -61,6 +63,35 @@ const GenerateTrip = () => {
         throw new Error('Budget is required');
       }
 
+      // Check cache first for faster response
+      const cachedPlan = await getCachedTripPlan(tripData);
+      if (cachedPlan) {
+        console.log('Using cached trip plan');
+        let tripResponse = cachedPlan;
+        
+        // Validate and normalize cached response
+        if (!tripResponse.travel_plan || !tripResponse.trip) {
+          // Cache might be corrupted, regenerate
+          console.log('Cached plan invalid, regenerating...');
+        } else {
+          // Use cached plan - save to Firebase and navigate
+          if (user?.email) {
+            const docId = Date.now().toString();
+            await setDoc(doc(db, 'UserTrip', docId), {
+              userEmail: user.email,
+              tripPlan: tripResponse,
+              tripData: JSON.stringify(tripData),
+              docId: docId,
+              createdAt: new Date().toISOString(),
+            });
+            await invalidateUserTripsCache(user.email);
+          }
+          setLoading(false);
+          router.replace('/MyTrip');
+          return;
+        }
+      }
+
       // Build the prompt with all replacements
       let FINAL_PROMPT = AI_PROMPT
         .replace(/{location}/g, tripData.locationInfo.name || 'Unknown')
@@ -71,8 +102,11 @@ const GenerateTrip = () => {
 
       console.log('Generating trip with prompt:', FINAL_PROMPT.substring(0, 100) + '...');
 
-      // Generate the travel plan using the AI model
-      let tripResponse = await generateTravelPlan(FINAL_PROMPT);
+      // Generate the travel plan using the AI model with optimized timeout
+      let tripResponse = await generateTravelPlan(FINAL_PROMPT, {
+        timeout: 25000, // 25 seconds timeout
+        maxRetries: 2
+      });
       
       console.log('Trip generated successfully:', tripResponse);
 
@@ -114,15 +148,24 @@ const GenerateTrip = () => {
         throw new Error('User not authenticated');
       }
 
-      // Save trip data to Firebase
+      // Cache the trip plan for future use
+      await cacheTripPlan(tripData, tripResponse);
+
+      // Save trip data to Firebase (parallel operation)
       const docId = Date.now().toString();
-      await setDoc(doc(db, 'UserTrip', docId), {
+      const savePromise = setDoc(doc(db, 'UserTrip', docId), {
         userEmail: user.email,
         tripPlan: tripResponse,
         tripData: JSON.stringify(tripData),
         docId: docId,
         createdAt: new Date().toISOString(),
       });
+
+      // Invalidate cache and save in parallel
+      await Promise.all([
+        savePromise,
+        invalidateUserTripsCache(user.email)
+      ]);
 
       setLoading(false);
       

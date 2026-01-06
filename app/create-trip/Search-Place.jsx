@@ -1,6 +1,6 @@
 import { StyleSheet,View,Image,Text} from 'react-native';
 import { useNavigation,useRouter } from 'expo-router';
-import { useEffect, useContext } from 'react';
+import { useEffect, useContext, useCallback } from 'react';
 import { Colors } from '@/constants/Colors';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { EXPO_PUBLIC_GOOGLE_MAP_API_KEY } from '@env';
@@ -24,6 +24,21 @@ const SearchPlace = () => {
     console.log("tripData",tripData)
   }, [tripData]);
 
+  // Optimized handler with debouncing effect
+  const handlePlaceSelect = useCallback((data, details = null) => {
+    console.log(data, details);
+    setTripData({
+      ...tripData,
+      locationInfo: {
+        name: data.description,
+        coordinate: details?.geometry.location,
+        photoRef: details?.photos[0]?.photo_reference,
+        url: details?.url
+      },
+    });
+    router.push('create-trip/Select-Traveler');
+  }, [tripData, setTripData, router]);
+
 
   return (
     <View style={styles.container}>
@@ -33,22 +48,14 @@ const SearchPlace = () => {
         <GooglePlacesAutocomplete
           placeholder='Search Place'
           fetchDetails={true}
-          onPress={(data, details = null) => {
-            console.log(data, details);
-            setTripData({
-              ...tripData,
-              locationInfo: {
-                name: data.description,
-                coordinate: details?.geometry.location,
-                photoRef: details?.photos[0].photo_reference,
-                url:details?.url
-              },
-            });
-            router.push('create-trip/Select-Traveler')
-          }}
+          onPress={handlePlaceSelect}
+          debounce={300}
+          minLength={2}
+          enablePoweredByContainer={false}
           query={{
             key: EXPO_PUBLIC_GOOGLE_MAP_API_KEY,
             language: 'en',
+            types: '(cities)', // Optimize search to cities only for faster results
           }}
           styles={{
             textInputContainer: {
